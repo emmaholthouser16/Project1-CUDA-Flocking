@@ -243,8 +243,16 @@ __device__ glm::vec3 computeVelocityChange(int N, int iSelf, const glm::vec3 *po
 __global__ void kernUpdateVelocityBruteForce(int N, glm::vec3 *pos,
   glm::vec3 *vel1, glm::vec3 *vel2) {
   // Compute a new velocity based on pos and vel1
+	int index = threadIdx.x + (blockIdx.x * blockDim.x);
+	if (index > N) {
+		return;
+	}
+	glm::vec3 thisPos = pos[index];
+	glm::vec3 thisVel = vel1[index];
+	//glm::vec3 newVel = 
   // Clamp the speed
   // Record the new velocity into vel2. Question: why NOT vel1?
+	//vel2[index] = newVel;
 }
 
 /**
@@ -348,6 +356,8 @@ __global__ void kernUpdateVelNeighborSearchCoherent(
 */
 void Boids::stepSimulationNaive(float dt) {
   // TODO-1.2 - use the kernels you wrote to step the simulation forward in time.
+  //kern update pos
+	//kern update velocity
   // TODO-1.2 ping-pong the velocity buffers
 }
 
