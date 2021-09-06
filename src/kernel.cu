@@ -231,9 +231,72 @@ void Boids::copyBoidsToVBO(float *vbodptr_positions, float *vbodptr_velocities) 
 */
 __device__ glm::vec3 computeVelocityChange(int N, int iSelf, const glm::vec3 *pos, const glm::vec3 *vel) {
   // Rule 1: boids fly towards their local perceived center of mass, which excludes themselves
-  // Rule 2: boids try to stay a distance d away from each other
-  // Rule 3: boids try to match the speed of surrounding boids
-  return glm::vec3(0.0f, 0.0f, 0.0f);
+	//what is boid B
+	float center_x = 0.0;
+	float center_y = 0.0;
+	float center_z = 0.0;
+	float separate_x = 0.0;
+	float separate_y = 0.0;
+	float separate_z = 0.0;
+	float cohesion_x = 0.0;
+	float cohesion_y = 0.0;
+	float cohesion_z = 0.0;
+	int numNeighbor = 0;
+	glm::vec3 Vel2 = glm::vec3(0.f, 0.f, 0.f);
+	for (int i = 0; i < N; i++)
+	{
+		if (i == iSelf)
+		{
+			continue;
+		}
+		//glm distance 
+		float distance = glm::length(glm::vec3(pos[iSelf].x - pos[i].x, pos[iSelf].y - pos[i].y, pos[iSelf].z - pos[i].z));
+		if (distance < rule1Distance)
+		{
+			//Rule 1 Alignment
+			center_x += pos[i].x;
+			center_y += pos[i].y;
+			center_z += pos[i].z;
+			numNeighbor += 1;
+
+			//Rule 2 Separation
+			if (distance < rule2Distance)
+			{
+				separate_x -= pos[i].x - pos[iSelf].x;
+				separate_y -= pos[i].y - pos[iSelf].y;
+				separate_z -= pos[i].z - pos[iSelf].z;
+
+			}
+
+			//Rule 3 Cohesion
+			cohesion_x += vel[i].x;
+			cohesion_y += vel[i].y;
+			cohesion_z += vel[i].z;
+
+
+		}
+	}
+	if (numNeighbor > 0)
+	{
+		center_x /= numNeighbor;
+		center_y /= numNeighbor;
+		center_z /= numNeighbor;
+
+		Vel2.x += (center_x - pos[iSelf].x) * rule1Scale;
+		Vel2.y += (center_y - pos[iSelf].y) * rule1Scale;
+		Vel2.z += (center_z - pos[iSelf].z) * rule1Scale;
+
+		Vel2.x += cohesion_x * rule3Scale;
+		Vel2.y += cohesion_y * rule3Scale;
+		Vel2.z += cohesion_z * rule3Scale;
+
+	}
+
+	Vel2.x += separate_x * rule2Scale;
+	Vel2.y += separate_y * rule2Scale;
+	Vel2.z += separate_z * rule2Scale;
+
+	return Vel2;
 }
 
 /**
@@ -247,12 +310,29 @@ __global__ void kernUpdateVelocityBruteForce(int N, glm::vec3 *pos,
 	if (index > N) {
 		return;
 	}
-	glm::vec3 thisPos = pos[index];
-	glm::vec3 thisVel = vel1[index];
-	//glm::vec3 newVel = 
-  // Clamp the speed
-  // Record the new velocity into vel2. Question: why NOT vel1?
-	//vel2[index] = newVel;
+	//glm::vec3 thisPos = pos[index];
+	//glm::vec3 thisVel = vel1[index];
+	glm::vec3 newVel = computeVelocityChange(N, index, pos, vel1);
+	// Clamp the speed
+	/*if (newVel.x > maxSpeed)
+	{
+		newVel.x = maxSpeed;
+	}
+	else if (newVel.y > maxSpeed)
+	{
+		newVel.y = maxSpeed;
+	}
+	else if (newVel.z > maxSpeed)
+	{
+		newVel.z = maxSpeed;
+	}
+	*/
+	if (glm::length(newVel) > maxSpeed)
+	{
+		newVel = (newVel / glm::length(newVel) * maxSpeed);
+	}
+    // Record the new velocity into vel2. Question: why NOT vel1?
+	vel2[index] = newVel;
 }
 
 /**
@@ -357,6 +437,11 @@ __global__ void kernUpdateVelNeighborSearchCoherent(
 void Boids::stepSimulationNaive(float dt) {
   // TODO-1.2 - use the kernels you wrote to step the simulation forward in time.
   //kern update pos
+	dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
+	kernUpdatePos << <fullBlocksPerGrid, blockSize >> > (numObjects, dt, dev_pos, dev_vel1);
+	kernUpdateVelocityBruteForce << <fullBlocksPerGrid, blockSize >> > (numObjects, dev_pos, dev_vel1, dev_vel2);
+	//copy instead
+	dev_vel1 = dev_vel2;
 	//kern update velocity
   // TODO-1.2 ping-pong the velocity buffers
 }
