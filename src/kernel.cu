@@ -236,7 +236,7 @@ __device__ glm::vec3 computeVelocityChange(int N, int iSelf, const glm::vec3 *po
 	glm::vec3 separate = glm::vec3(0.f, 0.f, 0.f);
 	glm::vec3 cohesion = glm::vec3(0.f, 0.f, 0.f);
 	int numNeighbor = 0;
-	glm::vec3 Vel2 = glm::vec3(0.f, 0.f, 0.f);
+	glm::vec3 Vel2 = vel[iSelf];
 	for (int i = 0; i < N; i++)
 	{
 	
@@ -245,12 +245,12 @@ __device__ glm::vec3 computeVelocityChange(int N, int iSelf, const glm::vec3 *po
 			continue;
 		}
 		//glm distance 
-		float distance =  glm::length(pos[iSelf] - pos[i]);
+		float distance =  glm::distance(pos[iSelf], pos[i]);
 		if (distance < rule1Distance)
 		{
 			//Rule 1 Alignment
 			center += pos[i];
-			numNeighbor += 1;
+			numNeighbor++;
 
 			//Rule 2 Separation
 			if (distance < rule2Distance)
@@ -261,7 +261,6 @@ __device__ glm::vec3 computeVelocityChange(int N, int iSelf, const glm::vec3 *po
 
 			//Rule 3 Cohesion
 			cohesion += vel[i];
-
 
 		}
 	}
@@ -289,26 +288,14 @@ __global__ void kernUpdateVelocityBruteForce(int N, glm::vec3 *pos,
   glm::vec3 *vel1, glm::vec3 *vel2) {
   // Compute a new velocity based on pos and vel1
 	int index = threadIdx.x + (blockIdx.x * blockDim.x);
-	if (index > N) {
+	if (index >= N) {
 		return;
 	}
 	//glm::vec3 thisPos = pos[index];
 	//glm::vec3 thisVel = vel1[index];
-	glm::vec3 newVel = computeVelocityChange(N, index, pos, vel1);
+	glm::vec3 newVel = glm::vec3(0.f, 0.f, 0.f);
+	newVel = computeVelocityChange(N, index, pos, vel1);
 	// Clamp the speed
-	/*if (newVel.x > maxSpeed)
-	{
-		newVel.x = maxSpeed;
-	}
-	else if (newVel.y > maxSpeed)
-	{
-		newVel.y = maxSpeed;
-	}
-	else if (newVel.z > maxSpeed)
-	{
-		newVel.z = maxSpeed;
-	}
-	*/
 	if (glm::length(newVel) > maxSpeed)
 	{
 		newVel = (newVel / glm::length(newVel) * maxSpeed);
@@ -420,10 +407,11 @@ void Boids::stepSimulationNaive(float dt) {
   // TODO-1.2 - use the kernels you wrote to step the simulation forward in time.
   //kern update pos
 	dim3 fullBlocksPerGrid((numObjects + blockSize - 1) / blockSize);
-	kernUpdatePos << <fullBlocksPerGrid, blockSize >> > (numObjects, dt, dev_pos, dev_vel1);
 	kernUpdateVelocityBruteForce << <fullBlocksPerGrid, blockSize >> > (numObjects, dev_pos, dev_vel1, dev_vel2);
+	kernUpdatePos << <fullBlocksPerGrid, blockSize >> > (numObjects, dt, dev_pos, dev_vel1);
+	
 	//copy instead
-	cudaMemcpy(dev_vel1, dev_vel2, numObjects * sizeof(glm::vec3), cudaMemcpyDeviceToDevice);
+	cudaMemcpy(dev_vel1, dev_vel2, numObjects * sizeof(glm::vec3), cudaMemcpyHostToHost);
 	//dev_vel1 = dev_vel2;
 	//kern update velocity
   // TODO-1.2 ping-pong the velocity buffers
